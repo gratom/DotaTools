@@ -11,9 +11,7 @@ namespace Net
 {
     public static class Dota2Api
     {
-        // Базовый эндпоинт официального API:
-        // https://api.steampowered.com/IDOTA2Match_570/GetMatchDetails/V001/?key=...&match_id=...
-        private const string BaseUrl = "https://api.steampowered.com/IDOTA2Match_570/GetMatchDetails/V001/";
+        private const string BaseUrl = "https://api.opendota.com/api/matches/";
 
         public static async Task<MatchDetailsResult> FetchMatchDetailsAsync(ulong matchId, string steamWebApiKey, int timeoutSeconds = 30)
         {
@@ -25,30 +23,19 @@ namespace Net
             StringBuilder sb = new StringBuilder(BaseUrl);
             sb.Append("?key=").Append(UnityWebRequest.EscapeURL(steamWebApiKey));
             sb.Append("&match_id=").Append(matchId.ToString());
+            string str = sb.ToString();
+            Debug.Log($"Try request:{str}");
 
             using (UnityWebRequest req = UnityWebRequest.Get(sb.ToString()))
             {
                 req.downloadHandler = new DownloadHandlerBuffer();
                 req.timeout = timeoutSeconds;
 
-                // Подставляем "браузерные" заголовки на всякий случай
-                req.SetRequestHeader("User-Agent", "UnityPlayer/2021 (Dota2MatchClient)");
-                req.SetRequestHeader("Accept", "application/json");
-
-#if UNITY_2020_2_OR_NEWER
                 UnityWebRequestAsyncOperation op = req.SendWebRequest();
                 while (!op.isDone) { await Task.Yield(); }
-#else
-                // На старых версиях Unity — через awaiter оболочку
-                UnityWebRequestAsyncOperation op = req.SendWebRequest();
-                while (!op.isDone) { await Task.Yield(); }
-#endif
 
-#if UNITY_2020_2_OR_NEWER
                 bool hasNetworkError = req.result == UnityWebRequest.Result.ConnectionError || req.result == UnityWebRequest.Result.ProtocolError;
-#else
-                bool hasNetworkError = req.isNetworkError || req.isHttpError;
-#endif
+
                 if (hasNetworkError)
                 {
                     throw new Exception($"HTTP error: {(int)req.responseCode} - {req.error}");

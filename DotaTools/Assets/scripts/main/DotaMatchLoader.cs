@@ -1,34 +1,66 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Net;
+using Newtonsoft.Json;
 using Tools;
 using UnityEngine;
+using UnityEngine.Networking;
 
 [NamedBehavior]
 public class DotaMatchLoader : MonoBehaviour
 {
-    [SerializeField] private string steamWebApiKey; // положи сюда свой Steam Web API Key
-    [SerializeField] private ulong matchId;         // целевой match_id
+    public string matchId;
 
-    [ContextMenu("Load")]
-    private async void Load()
+    public MatchSummary matchSummary;
+
+    private const string matchSummaryUrl = "https://api.opendota.com/api/matches/";
+
+    [ContextMenu("Download and parse")]
+    public void DownloadAndParse()
     {
-        try
-        {
-            MatchDetailsResult match = await Dota2Api.FetchMatchDetailsAsync(matchId, steamWebApiKey, 30);
-            Debug.Log($"Match {match.match_id} | radiant_win={match.radiant_win} | duration={match.duration}s");
+        string url = matchSummaryUrl + matchId;
+        StartCoroutine(DownloadMatchCoroutine(url));
+    }
 
-            if (match.players != null && match.players.Length > 0)
-            {
-                for (int i = 0; i < match.players.Length; i++)
-                {
-                    PlayerDetails p = match.players[i];
-                    Debug.Log($"P{i} slot={p.player_slot} hero={p.hero_id} KDA={p.kills}/{p.deaths}/{p.assists} item0={p.item_0}");
-                }
-            }
-        }
-        catch (System.Exception ex)
+    private IEnumerator DownloadMatchCoroutine(string url)
+    {
+        using (UnityWebRequest req = UnityWebRequest.Get(url))
         {
-            Debug.LogError(ex.Message);
+            req.timeout = 20;
+            req.downloadHandler = new DownloadHandlerBuffer();
+
+            UnityWebRequestAsyncOperation op = req.SendWebRequest();
+            while (!op.isDone)
+            {
+                yield return null;
+            }
+
+            if (req.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"[DotaMatchLoader] HTTP {req.responseCode}: {req.error}\nURL: {url}");
+                yield break;
+            }
+
+            string json = req.downloadHandler.text;
+
+            // Простая проверка на "пустой"/короткий ответ
+            if (string.IsNullOrEmpty(json) || json.Length < 2)
+            {
+                Debug.LogError("[DotaMatchLoader] Empty response");
+                yield break;
+            }
+
+            try
+            {
+                matchSummary = JsonConvert.DeserializeObject<MatchSummary>(json);
+                Debug.Log("[DotaMatchLoader] Parsed OK");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[DotaMatchLoader] JSON parse error: {ex.Message}");
+            }
         }
     }
 }
